@@ -1,0 +1,7 @@
+# Only the recipe, license, and shipped helpers enter the build context.
+**
+!Dockerfile
+!.dockerignore
+!scripts/
+!scripts/*.sh
+!LICENSE

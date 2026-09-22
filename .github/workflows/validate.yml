@@ -1,0 +1,33 @@
+name: Validate toolbox
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check Bash syntax
+        run: for script in scripts/*.sh tests/*.sh; do bash -n "$script"; done
+      - name: Check PowerShell syntax
+        shell: pwsh
+        run: |
+          $parseErrors = $null
+          $tokens = $null
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            "$PWD/toolbox.ps1", [ref]$tokens, [ref]$parseErrors
+          ) | Out-Null
+          if ($parseErrors.Count) { throw ($parseErrors | Out-String) }
+      - name: Build image
+        run: docker build --pull -t it-toolbox:ci .
+      - name: Run offline smoke checks
+        run: docker run --rm --network none --mount "type=bind,source=$PWD/tests,target=/tests,readonly" it-toolbox:ci bash /tests/smoke.sh
+      - name: Verify bind-mount persistence through the launcher
+        shell: pwsh
+        run: |
+          ./toolbox.ps1 -Image it-toolbox:ci -Command @('bash', '-c', 'printf "persistent\n" > /work/ci-persistence.txt')
+          if ($LASTEXITCODE -ne 0) { throw 'Launcher failed.' }
+          if ((Get-Content ./work/ci-persistence.txt) -ne 'persistent') { throw 'Persistence failed.' }

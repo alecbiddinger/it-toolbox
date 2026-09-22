@@ -1,0 +1,21 @@
+# Local reports and inputs are private by default.
+/work/*
+!/work/.gitkeep
+.env
+.env.*
+!.env.example
+*.pcap
+*.pcapng
+*.pem
+*.key
+*.pfx
+*.p12
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.log
