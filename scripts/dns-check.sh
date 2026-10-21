@@ -6,9 +6,16 @@ if (( $# < 1 || $# > 3 )) || [[ -z $1 || $1 == [-@+]* ]]; then
     exit 2
 fi
 host=$1
+if [[ $host == *[[:space:]]* || $host == *..* ]]; then
+    echo "HOST must be a hostname or IP address without spaces or empty labels." >&2
+    exit 2
+fi
 record_type=${2:-A}
-if [[ ! $record_type =~ ^[A-Za-z][A-Za-z0-9]*$ ]]; then
-    echo "TYPE must be a DNS record type, such as A, AAAA, MX, or TXT." >&2
+record_type=${record_type^^}
+# dig silently queries A for an unknown type, so accept common types or RFC 3597 TYPEnnn.
+known_types='A|AAAA|ANY|CAA|CDNSKEY|CDS|CNAME|DNAME|DNSKEY|DS|HINFO|HTTPS|LOC|MX|NAPTR|NS|NSEC|NSEC3|NSEC3PARAM|PTR|RRSIG|SOA|SRV|SSHFP|SVCB|TLSA|TXT|URI|TYPE[0-9]{1,5}'
+if [[ ! $record_type =~ ^($known_types)$ ]]; then
+    echo "TYPE must be a DNS record type, such as A, AAAA, MX, TXT, or TYPE65." >&2
     exit 2
 fi
 resolver=()
@@ -19,4 +26,9 @@ if (( $# == 3 )); then
     fi
     resolver=("@$3")
 fi
-exec dig "${resolver[@]}" -q "$host" -t "$record_type" +time=3 +tries=1 +noall +comments +answer
+query=(-q "$host" -t "$record_type")
+# A PTR query for an IP address means a reverse lookup of its in-addr/ip6 name.
+if [[ $record_type == PTR && ( $host =~ ^[0-9]+(\.[0-9]+){3}$ || $host == *:* ) ]]; then
+    query=(-x "$host")
+fi
+exec dig "${resolver[@]}" "${query[@]}" +time=3 +tries=1 +noall +comments +answer
