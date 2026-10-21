@@ -35,5 +35,14 @@ $dockerArgs = @('run', '--rm')
 if ($Command.Count -eq 0 -and -not $NoTty) { $dockerArgs += '-it' }
 $dockerArgs += @('--mount', "type=bind,source=$workPath,target=/work", $Image)
 $dockerArgs += $Command
+# Windows PowerShell 5.1 and PowerShell before 7.3 drop empty arguments and do not
+# escape embedded double quotes, so quote those arguments with Windows rules here.
+$argumentPassing = Get-Variable -Name PSNativeCommandArgumentPassing -ValueOnly -ErrorAction Ignore
+if ($null -eq $argumentPassing -or $argumentPassing -eq 'Legacy') {
+    $dockerArgs = @($dockerArgs | ForEach-Object {
+        if ($_ -and $_ -notmatch '[\s"]') { $_ }
+        else { '"' + ($_ -replace '(\\*)"', '$1$1\"' -replace '(\\+)$', '$1$1') + '"' }
+    })
+}
 & docker @dockerArgs
 exit $LASTEXITCODE

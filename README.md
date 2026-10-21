@@ -54,7 +54,10 @@ it-toolbox/
 |   |-- dns-check.sh
 |   |-- port-check.sh
 |   `-- web-check.sh
-|-- tests/smoke.sh              Offline container checks
+|-- tests/                     Offline container and launcher checks
+|   |-- fixtures.py
+|   |-- launcher.ps1
+|   `-- smoke.sh
 |-- examples/sample-output.md   Synthetic local-lab walkthrough
 |-- work/.gitkeep               Persistent workspace; contents ignored
 |-- .github/workflows/validate.yml
@@ -189,10 +192,13 @@ web-check.sh https://example.com > /work/web-check.txt
 All helpers reject missing or invalid arguments with exit code `2` and otherwise
 return the underlying tool's exit code. DNS has a three-second query timeout and
 one attempt; inspect the printed DNS status because `dig` can exit successfully
-for `NXDOMAIN` or an empty answer. TCP checks accept one port in `1..65535` and
+for `NXDOMAIN` or an empty answer. DNS types are case-insensitive and limited to
+common types or the generic `TYPEnnn` form, because `dig` silently queries `A`
+for an unknown type. A `PTR` check of an IP address performs a reverse lookup,
+for example `dns-check.sh 192.0.2.10 PTR`. TCP checks accept one port in `1..65535` and
 use a three-second connection wait; hostname resolution can add time. Web checks
 perform a GET, discard the body, print headers and timing, enforce HTTPS
-certificate verification, and fail on HTTP 4xx/5xx. They accept only HTTP(S),
+certificate verification (ignoring any `~/.curlrc`), and fail on HTTP 4xx/5xx. They accept only HTTP(S),
 do not follow redirects, and have a 15-second total timeout. A redirect response
 is therefore reported without checking its destination.
 
@@ -307,19 +313,24 @@ After building, run the offline smoke checks from **host PowerShell**:
 ```powershell
 $toolboxTests = (Resolve-Path .\tests).Path
 docker run --rm --network none --mount "type=bind,source=$toolboxTests,target=/tests,readonly" it-toolbox:1.0.0 bash /tests/smoke.sh
-.\toolbox.ps1 -Image it-toolbox:1.0.0 -Command @('bash', '-c', 'echo persistent > /work/validation.txt')
-Get-Content .\work\validation.txt
+.\tests\launcher.ps1 -Image it-toolbox:1.0.0
 ```
 
-The smoke check verifies installed commands, trusted CA data, helper syntax,
-HTTP success and failure, argument rejection, loopback TCP/Nmap connectivity,
-JSON parsing, and Python virtual environments. It does not scan external hosts
-or verify external DNS, TLS, ICMP, WHOIS, or packet-capture behavior. Use the
+The smoke check starts loopback HTTP, HTTPS, and DNS fixtures, then verifies
+installed commands, trusted CA data, helper syntax, the exact exit code for each
+invalid argument, DNS answers, `NXDOMAIN` and reverse lookups, TCP and Nmap
+connectivity, HTTP success, failure, and unfollowed redirects, HTTPS certificate
+enforcement, helper timeouts, JSON parsing, and Python virtual environments. It
+takes about 20 seconds because it waits for the timeouts. It does not contact
+external hosts or verify ICMP, WHOIS, or packet-capture behavior. Use the
 feature examples for those environment-dependent checks.
 
-GitHub Actions builds the image, runs the offline checks, parses PowerShell, and
-checks launcher bind-mount persistence on Ubuntu. Repeat launcher verification
-on Windows when changing host path handling.
+The launcher check covers the default and relative work paths, spaces, comma
+rejection, exit-code propagation, and passing quotes and empty arguments through
+to the container. GitHub Actions builds the image, lints Bash with ShellCheck,
+parses PowerShell, runs the smoke check, and runs the launcher check twice on
+Ubuntu, once with the argument passing that Windows PowerShell 5.1 uses. Repeat
+launcher verification on Windows when changing host path handling.
 
 ## Troubleshooting
 
